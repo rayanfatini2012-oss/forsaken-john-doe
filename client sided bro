@@ -1,0 +1,383 @@
+writefile("COMPASS.mp3", game:HttpGet("https://github.com/ian49972/smth/raw/refs/heads/main/COMPASS.mp3"))
+writefile("Forsakened.mp3", game:HttpGet("https://github.com/ian49972/smth/raw/refs/heads/main/Forsakened.mp3"))
+writefile("Rage.mp3", game:HttpGet("https://github.com/ian49972/smth/raw/refs/heads/main/Rage.mp3"))
+
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local camera = workspace.CurrentCamera
+
+local npcModel = game:GetObjects("rbxassetid://81906373347969")[1]
+
+local function weldPartToLimb(limb, partToWeld, originalParentPart)
+	partToWeld.Anchored = false
+	partToWeld.CanCollide = false
+	partToWeld.Massless = true
+	local relativeCFrame = originalParentPart.CFrame:ToObjectSpace(partToWeld.CFrame)
+	partToWeld.Parent = limb
+	partToWeld.CFrame = limb.CFrame * relativeCFrame
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = limb
+	weld.Part1 = partToWeld
+	weld.Parent = partToWeld
+end
+
+for _, npcLimb in pairs(npcModel:GetChildren()) do
+	if npcLimb:IsA("BasePart") then
+		local playerLimb = character:FindFirstChild(npcLimb.Name)
+		if playerLimb then
+			if npcLimb.Name == "Head" then
+				npcLimb.Transparency = 1
+				npcLimb.CanCollide = false
+				local playerHead = playerLimb
+				local faceDecal = playerHead:FindFirstChild("face")
+				if faceDecal then faceDecal:Destroy() end
+				for _, child in ipairs(npcLimb:GetChildren()) do
+					if child.Name ~= "Head" and (child:IsA("BasePart") or child:IsA("MeshPart")) then
+						local clone = child:Clone()
+						if clone.Name == "Cylinder" then
+							clone.CFrame = clone.CFrame * CFrame.new(0, 0, 0.02)
+						end
+						weldPartToLimb(playerLimb, clone, npcLimb)
+					end
+				end
+			else
+				for _, child in ipairs(npcLimb:GetChildren()) do
+					if child:IsA("BasePart") or child:IsA("MeshPart") then
+						local clone = child:Clone()
+						if clone.Name == "Cylinder" then
+							clone.CFrame = clone.CFrame * CFrame.new(0, 0, 0.02)
+						end
+						weldPartToLimb(playerLimb, clone, npcLimb)
+					end
+				end
+			end
+		end
+	end
+end
+npcModel:Destroy()
+
+local rightArm = character:FindFirstChild("Right Arm")
+if rightArm then
+	rightArm.Transparency = 1
+	for _, desc in pairs(rightArm:GetChildren()) do
+		if desc:IsA("BasePart") and not desc:IsA("MeshPart") then
+			desc.Transparency = 1
+		end
+	end
+end
+
+RunService.Heartbeat:Connect(function()
+	if rightArm then
+		rightArm.Transparency = 1
+		for _, desc in pairs(rightArm:GetChildren()) do
+			if desc:IsA("BasePart") and not desc:IsA("MeshPart") then
+				desc.Transparency = 1
+			end
+		end
+	end
+end)
+
+local tStyle = {
+	[Enum.PoseEasingStyle.Linear] = Enum.EasingStyle.Linear,
+	[Enum.PoseEasingStyle.Bounce] = Enum.EasingStyle.Bounce,
+	[Enum.PoseEasingStyle.Cubic] = Enum.EasingStyle.Cubic,
+	[Enum.PoseEasingStyle.Elastic] = Enum.EasingStyle.Elastic,
+	[Enum.PoseEasingStyle.Constant] = Enum.EasingStyle.Linear,
+}
+local tDirection = {
+	[Enum.PoseEasingDirection.In] = Enum.EasingDirection.In,
+	[Enum.PoseEasingDirection.Out] = Enum.EasingDirection.Out,
+	[Enum.PoseEasingDirection.InOut]= Enum.EasingDirection.InOut,
+}
+
+local function BuildTweens(Model, KeyFrameSequence)
+	local frames = {}
+	for _, kf in ipairs(KeyFrameSequence:GetKeyframes()) do
+		table.insert(frames, {Time = kf.Time, Keyframe = kf})
+	end
+	table.sort(frames, function(a,b) return a.Time < b.Time end)
+	local tweens, motors, values, keyPoses = {}, {}, {}, {}
+	local function GetMotorFromPose(pose)
+		for _,v in pairs(Model:GetDescendants()) do
+			if v:IsA("Motor6D") and v.Part1 and v.Part0 and v.Part1.Name == pose.Name and v.Part0.Name == pose.Parent.Name then
+				return v
+			end
+		end
+	end
+	for i,frame in ipairs(frames) do
+		for _, pose in ipairs(frame.Keyframe:GetDescendants()) do
+			if pose:IsA("Pose") and pose.Weight > 0 then
+				local motor = motors[pose.Name] or GetMotorFromPose(pose)
+				if not keyPoses[i] then keyPoses[i] = {Time = frame.Time, Poses={}} end
+				if not motors[pose.Name] then motors[pose.Name] = motor end
+				if not values[pose.Name] then
+					local cv = Instance.new("CFrameValue")
+					cv.Value = motor.Transform
+					cv.Parent = motor
+					values[pose.Name] = cv
+				end
+				if motor then
+					keyPoses[i].Poses[pose.Name] = {Motor=motor, Pose=pose}
+				end
+			end
+		end
+	end
+	if #keyPoses > 1 then
+		local last = {}
+		for i=1,#keyPoses-1 do
+			local k1, k2 = keyPoses[i], keyPoses[i+1]
+			local dur = k2.Time - k1.Time
+			tweens[i] = {Time=dur, Tweens={}}
+			for n,d in pairs(k1.Poses) do last[n]=d end
+			for n,d in pairs(k2.Poses) do
+				local info = TweenInfo.new(
+					math.abs(last[n].Pose:FindFirstAncestorOfClass("Keyframe").Time - k2.Time),
+					tStyle[last[n].Pose.EasingStyle],
+					tDirection[last[n].Pose.EasingDirection]
+				)
+				tweens[i].Tweens[n] = TweenService:Create(values[n], info, {Value=d.Pose.CFrame})
+			end
+		end
+	end
+	return tweens, motors, values
+end
+
+local function PlayKeyframeSequence(Model, KeyFrameSequence, looped, onFinished)
+	local tweens, motors, values = BuildTweens(Model, KeyFrameSequence)
+	local stopped = false
+	local hb
+	hb = RunService.Heartbeat:Connect(function()
+		if stopped then hb:Disconnect() return end
+		for n,motor in pairs(motors) do
+			motor.Transform = values[n].Value
+		end
+	end)
+	local function loop()
+		repeat
+			for _, segment in ipairs(tweens) do
+				for _, tw in pairs(segment.Tweens) do tw:Play() end
+				task.wait(segment.Time)
+				if stopped then break end
+			end
+			if not looped and not stopped then
+				stopped = true
+				if onFinished then onFinished() end
+				break
+			end
+		until stopped
+	end
+	task.spawn(loop)
+	return function()
+		stopped = true
+	end
+end
+
+local Object = game:GetObjects("rbxassetid://102046170699445")[1]
+Object.Parent = workspace
+Object:PivotTo(character:GetPivot())
+local rig = Object:FindFirstChild("RigJOHNDOE")
+local animsaves = rig:FindFirstChild("AnimSaves")
+
+local safe = Instance.new("Folder")
+safe.Name = "SafeKeyframes"
+safe.Parent = player:WaitForChild("PlayerGui")
+
+local idleKF = animsaves.idle:Clone()
+local walkKF = animsaves.walk:Clone()
+local runKF = animsaves.run:Clone()
+local footprintKF = animsaves.footprint:Clone()
+local corruptKF = animsaves.corruptENERGY:Clone()
+local m1KF = animsaves.m1:Clone()
+local introKF = animsaves.intro:Clone()
+
+idleKF.Parent, walkKF.Parent, runKF.Parent = safe, safe, safe
+footprintKF.Parent, corruptKF.Parent, m1KF.Parent, introKF.Parent = safe, safe, safe, safe
+Object:Destroy()
+
+local currentStopper
+local currentAnim
+
+local function playAnim(anim, looped, onFinished)
+	if currentAnim ~= anim then
+		if currentStopper then currentStopper() end
+		local animator = humanoid:FindFirstChildOfClass("Animator")
+		if animator then animator.Parent = nil end
+		currentAnim = anim
+		currentStopper = PlayKeyframeSequence(character, anim, looped, function()
+			currentAnim = nil
+			if onFinished then onFinished() end
+		end)
+	end
+end
+
+local PlayerGui = player:WaitForChild("PlayerGui")
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AbilityUI"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = PlayerGui
+
+local function createBlackScreen(text, duration, callback)
+	local frame = Instance.new("Frame")
+	frame.BackgroundColor3 = Color3.new(0,0,0)
+	frame.Size = UDim2.fromScale(1,1)
+	frame.Position = UDim2.fromScale(0,0)
+	frame.Parent = screenGui
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1,1)
+	label.Position = UDim2.fromScale(0,0)
+	label.BackgroundTransparency = 1
+	label.Text = text
+	label.TextColor3 = Color3.new(1,1,1)
+	label.Font = Enum.Font.Garamond
+	label.TextScaled = false
+	label.TextSize = 48
+	label.TextStrokeTransparency = 0
+	label.TextWrapped = false
+	label.TextXAlignment = Enum.TextXAlignment.Center
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.Parent = frame
+	local startTime = tick()
+	RunService.RenderStepped:Connect(function()
+		local elapsed = tick()-startTime
+		if elapsed <= duration then
+			label.TextColor3 = Color3.new(1,1-(elapsed/duration),1-(elapsed/duration))
+		end
+	end)
+	task.wait(duration)
+	frame:Destroy()
+	if callback then callback() end
+end
+
+playAnim(introKF,false)
+local forsakenSound = Instance.new("Sound")
+forsakenSound.Name = "Forsakened"
+forsakenSound.SoundId = getcustomasset("Forsakened.mp3")
+forsakenSound.Volume = 2
+forsakenSound.Looped = false
+forsakenSound.Parent = workspace
+forsakenSound:Play()
+
+createBlackScreen("its client sided but enjoy, "..player.Name,2)
+
+local isRunning = false
+local defaultSpeed, runSpeed = 16, 28
+humanoid.WalkSpeed = defaultSpeed
+
+RunService.RenderStepped:Connect(function()
+	if currentAnim == introKF or currentAnim == footprintKF or currentAnim == corruptKF or currentAnim == m1KF then return end
+	local moving = humanoid.MoveDirection.Magnitude > 0.1
+	if moving then
+		if isRunning then
+			playAnim(runKF, true)
+		else
+			playAnim(walkKF, true)
+		end
+	else
+		playAnim(idleKF, true)
+	end
+end)
+
+local function makeButton(name, pos, color, func)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = UDim2.new(0, 120, 0, 40)
+	btn.Position = pos
+	btn.BackgroundColor3 = color
+	btn.TextColor3 = Color3.new(1, 1, 1)
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 18
+	btn.Text = name
+	btn.Parent = screenGui
+	btn.MouseButton1Click:Connect(func)
+end
+
+makeButton("Run", UDim2.new(0, 20, 1, -50), Color3.fromRGB(255, 50, 50), function()
+	isRunning = not isRunning
+	humanoid.WalkSpeed = isRunning and runSpeed or defaultSpeed
+	local btn = screenGui:FindFirstChild("Run")
+	btn.Text = isRunning and "Running..." or "Run"
+	btn.BackgroundColor3 = isRunning and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 50, 50)
+end)
+makeButton("Footprint", UDim2.new(0, 160, 1, -50), Color3.fromRGB(100,100,255), function()
+	playAnim(footprintKF,false)
+end)
+
+makeButton("Corrupt Energy", UDim2.new(0, 300, 1, -50), Color3.fromRGB(255,0,255), function()
+playAnim(corruptKF,false)
+	task.spawn(function()
+		task.wait(2.2)
+		local spikes = {}
+		for i=1,26 do
+			local spike = game:GetObjects("rbxassetid://15714295775")[1]:Clone()
+			spike.Anchored = true
+			spike.CFrame = character.HumanoidRootPart.CFrame * CFrame.new(0,0,-(i*2))
+			spike.Parent = workspace
+			table.insert(spikes, spike)
+			task.wait(0.05)
+		end
+		task.wait(10)
+		for _, s in pairs(spikes) do
+			s:Destroy()
+		end
+	end)
+end)
+
+makeButton("M1", UDim2.new(0, 440, 1, -50), Color3.fromRGB(255,200,0), function()
+	playAnim(m1KF,false)
+end)
+
+makeButton("Rage", UDim2.new(0, 20, 1, -100), Color3.fromRGB(255,0,0), function()
+	local originalWalk = humanoid.WalkSpeed
+	local originalRun = runSpeed
+	humanoid.WalkSpeed = 26
+	runSpeed = 50
+	local rageSound = Instance.new("Sound")
+	rageSound.SoundId = getcustomasset("Rage.mp3")
+	rageSound.Volume = 2
+	rageSound.Looped = false
+	rageSound.Parent = workspace
+	rageSound:Play()
+	task.spawn(function()
+		local shakeTime = 3
+		local camOrigin = camera.CFrame
+		local t0 = tick()
+		local conn
+		conn = RunService.RenderStepped:Connect(function()
+			local elapsed = tick()-t0
+			if elapsed >= shakeTime then conn:Disconnect() return end
+			local offset = Vector3.new(math.random()*0.5-0.25, math.random()*0.5-0.25, math.random()*0.5-0.25)
+			camera.CFrame = camOrigin * CFrame.new(offset)
+		end)
+	end)
+	task.delay(15,function()
+		humanoid.WalkSpeed = originalWalk
+		runSpeed = originalRun
+		if rageSound then rageSound:Stop() rageSound:Destroy() end
+	end)
+end)
+
+local compassSound = Instance.new("Sound")
+compassSound.Name = "CompassSound"
+compassSound.SoundId = getcustomasset("COMPASS.mp3")
+compassSound.Volume = 1
+compassSound.Looped = true
+compassSound.Parent = workspace
+task.delay(4,function()
+	compassSound:Play()
+end)
+
+humanoid.Died:Connect(function()
+	if compassSound then compassSound:Stop() compassSound:Destroy() end
+	if currentStopper then currentStopper() end
+	if screenGui then screenGui:Destroy() end
+	local animator = humanoid:FindFirstChildOfClass("Animator")
+	if animator and not animator.Parent then
+		animator.Parent = humanoid
+	end
+end)
