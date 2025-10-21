@@ -233,7 +233,7 @@ local function createBlackScreen(text, duration, callback)
 	label.Position = UDim2.fromScale(0,0)
 	label.BackgroundTransparency = 1
 	label.Text = text
-	label.TextColor3 = Color3.new(1,1,1)
+	label.TextColor3 = Color3.new(192, 245, 176)
 	label.Font = Enum.Font.Garamond
 	label.TextScaled = false
 	label.TextSize = 70
