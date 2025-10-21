@@ -263,7 +263,7 @@ forsakenSound.Looped = false
 forsakenSound.Parent = workspace
 forsakenSound:Play()
 
-createBlackScreen("its client sided but enjoy, "..player.Name,2)
+createBlackScreen("LEGENDS NEVER DIE ",2)
 
 local isRunning = false
 local defaultSpeed, runSpeed = 16, 28
