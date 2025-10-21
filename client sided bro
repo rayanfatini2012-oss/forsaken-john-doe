@@ -246,7 +246,7 @@ local function createBlackScreen(text, duration, callback)
 	RunService.RenderStepped:Connect(function()
 		local elapsed = tick()-startTime
 		if elapsed <= duration then
-			label.TextColor3 = Color3.new(0,255,0-(elapsed/duration),1-(elapsed/duration))
+			label.TextColor3 = Color3.new(1,1-(elapsed/duration),1-(elapsed/duration))
 		end
 	end)
 	task.wait(duration)
